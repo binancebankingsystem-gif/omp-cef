@@ -7,19 +7,19 @@ sampapi::v037r1::CChat* ChatView_R1::GetChat() const
     return sampapi::v037r1::RefChat();
 }
 
-void ChatView_R1::Clear()
+bool ChatView_R1::Clear()
 {
     auto* chat = GetChat();
-    if (!chat)
-        return;
+    // Primorsk: while SA:MP is loading, CChat exists before its dialog controls; UpdateScrollbar/ScrollToBottom
+    // dereference m_pScrollbar and crashed (samp.dll+0xA06D1, App::Tick). Wait until everything is created.
+    if (!chat || !chat->m_pGameUi || !chat->m_pScrollbar)
+        return false;
 
-    // Clear entries
     for (int i = 0; i < sampapi::v037r1::CChat::MAX_MESSAGES; ++i)
     {
         std::memset(&chat->m_entry[i], 0, sizeof(chat->m_entry[i]));
     }
 
-    // Reset helper fields where available
     if (chat->m_szLastMessage)
         chat->m_szLastMessage[0] = '\0';
 
@@ -28,4 +28,5 @@ void ChatView_R1::Clear()
 
     chat->UpdateScrollbar();
     chat->ScrollToBottom();
+    return true;
 }

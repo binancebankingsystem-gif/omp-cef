@@ -10,7 +10,7 @@ public:
     ChatView_R1() = default;
     ~ChatView_R1() override = default;
 
-    void Clear() override;
+    bool Clear() override;
 
 private:
     sampapi::v037r1::CChat* GetChat() const;

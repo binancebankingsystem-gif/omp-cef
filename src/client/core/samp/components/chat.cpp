@@ -33,10 +33,11 @@ void ChatComponent::Initialize()
     }
 }
 
-void ChatComponent::Clear()
+// Primorsk: false - SA:MP chat not ready (or unsupported SA:MP version): the caller keeps the request.
+bool ChatComponent::Clear()
 {
     if (!view_)
-        return;
+        return false;
 
-    view_->Clear();
+    return view_->Clear();
 }

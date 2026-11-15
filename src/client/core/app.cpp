@@ -97,6 +97,7 @@ void App::ResetSession()
     pending_emits_.clear();
     flushed_once_ = false;
     pending_clear_chat_ = false;
+    clear_chat_waiting_ = false;
 
     // Destroy all browsers
     browser_.DestroyAllBrowsers();
@@ -295,12 +296,24 @@ void App::Tick()
     browser_.CaptureScreen();
     browser_.RenderAll();
     
+    // Primorsk: CEF_ClearChat arrives on the login screen, often before SA:MP has created its chat controls.
+    // Calling CChat::UpdateScrollbar then crashed in samp.dll+0xA06D1 (EAX=EDI=0). Keep the request until the chat
+    // is ready, log once when it waits and when it is done.
     if (pending_clear_chat_)
     {
-        pending_clear_chat_ = false;
-
-        if (auto* chat = GetComponent<ChatComponent>())
-            chat->Clear();
+        auto* chat = GetComponent<ChatComponent>();
+        if (chat && chat->Clear())
+        {
+            pending_clear_chat_ = false;
+            if (clear_chat_waiting_)
+                LOG_INFO("[CEF] ClearChat: SA:MP chat is ready, cleared after waiting.");
+            clear_chat_waiting_ = false;
+        }
+        else if (!clear_chat_waiting_)
+        {
+            clear_chat_waiting_ = true;
+            LOG_WARN("[CEF] ClearChat: SA:MP chat is not ready yet (no CChat or its controls) - postponed.");
+        }
     }
 }
 

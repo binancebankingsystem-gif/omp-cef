@@ -7,11 +7,13 @@ sampapi::v03dl::CChat* ChatView_DL::GetChat() const
     return sampapi::v03dl::RefChat();
 }
 
-void ChatView_DL::Clear()
+bool ChatView_DL::Clear()
 {
     auto* chat = GetChat();
-    if (!chat)
-        return;
+    // Primorsk: while SA:MP is loading, CChat exists before its dialog controls; UpdateScrollbar/ScrollToBottom
+    // dereference m_pScrollbar and crashed (samp.dll+0xA06D1, App::Tick). Wait until everything is created.
+    if (!chat || !chat->m_pGameUi || !chat->m_pScrollbar)
+        return false;
 
     for (int i = 0; i < sampapi::v03dl::CChat::MAX_MESSAGES; ++i)
     {
@@ -26,4 +28,5 @@ void ChatView_DL::Clear()
 
     chat->UpdateScrollbar();
     chat->ScrollToBottom();
+    return true;
 }

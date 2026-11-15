@@ -101,4 +101,5 @@ private:
     std::vector<PendingEmit> pending_emits_;
 
     bool pending_clear_chat_ = false;
+    bool clear_chat_waiting_ = false;
 };

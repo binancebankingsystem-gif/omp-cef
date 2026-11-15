@@ -328,6 +328,14 @@ void Runtime::FinalizeInitialization(HWND hwnd)
 
 void Runtime::Stop()
 {
+	// Primorsk: Stop() ran twice (DllMain DLL_PROCESS_DETACH, then ~Runtime from runtime.reset()): the second pass
+	// shut CEF down again (renderer.exe c000000d) and called CursorHook::Shutdown(*hooks_) with hooks_ already reset.
+	if (stopped_.exchange(true))
+	{
+		LOG_INFO("[Runtime] Stop() already done - skipped.");
+		return;
+	}
+
 	if (app_)
 		app_->Shutdown();
 
@@ -364,7 +372,8 @@ void Runtime::Stop()
 		wndproc_.reset();
 	}
 
-	CursorHook::Instance().Shutdown(*hooks_);
+	if (hooks_)
+		CursorHook::Instance().Shutdown(*hooks_);
 	RenderManager::Instance().Shutdown();
 
 	if (hooks_)

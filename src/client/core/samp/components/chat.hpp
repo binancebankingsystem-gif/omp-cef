@@ -10,7 +10,7 @@ class ChatComponent : public ISampComponent
 public:
     void Initialize() override;
 
-    void Clear();
+    bool Clear();
 
 private:
     std::unique_ptr<IChatView> view_;
