@@ -20,6 +20,7 @@
 #include "samp/hooks/chat.hpp"
 #include "samp/hooks/scoreboard.hpp"
 #include "system/config_manager.hpp"
+#include "system/frame_pacing.hpp"
 #include "system/gta.hpp"
 #include "system/logger.hpp"
 #include "system/resource_manager.hpp"
@@ -111,6 +112,8 @@ bool Runtime::Start()
 
     RenderManager::Instance().OnPresent = [this]()
     {
+        frame_pacing::OnPresent(); // Primorsk: свой предел кадров (fps_limit)
+
         if (gta_)
             gta_->PumpMainThreadCallbacks();
 
@@ -163,6 +166,16 @@ bool Runtime::Start()
 	samp_version_->Initialize();
 
 	SampAddresses::Instance().Initialize(*samp_version_);
+
+	// Primorsk: частота кадров. Ключи пишет лаунчер в cef/config.json:
+	//   fps_limit — предел кадров игры (0 — без предела); ключа нет — предел 100 к/с SA:MP не трогаем;
+	//   ui_fps    — частота перерисовки интерфейса CEF (по умолчанию 60; 0 — на каждом кадре игры).
+	if (const int fpsLimit = config_->Get<int>("fps_limit", -1); fpsLimit >= 0)
+	{
+		frame_pacing::UnlockSampFrameCap(samp_version_->GetModule());
+		frame_pacing::SetFrameLimit(fpsLimit);
+	}
+	browser_->SetUiFrameRate(config_->Get<int>("ui_fps", 60));
 
 	// SA:MP hooks
 	samp_ = std::make_unique<Samp>(*hooks_);

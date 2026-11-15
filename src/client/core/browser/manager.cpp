@@ -1443,8 +1443,31 @@ void BrowserManager::OnPaint(int id, const void* buffer, int width, int height, 
     }
 }
 
+void BrowserManager::SetUiFrameRate(int fps)
+{
+    LARGE_INTEGER freq{};
+    QueryPerformanceFrequency(&freq);
+    const int64_t interval = (fps > 0 && freq.QuadPart > 0) ? freq.QuadPart / fps : 0;
+    ui_frame_interval_qpc_.store(interval, std::memory_order_release);
+    last_begin_frame_qpc_.store(0, std::memory_order_release);
+    LOG_INFO("[CEF] UI frame rate: {}", fps > 0 ? std::to_string(fps) + " FPS" : std::string("every game frame"));
+}
+
 void BrowserManager::SendExternalBeginFrames()
 {
+    // Primorsk: интерфейс не перерисовывается чаще ui_fps — при 240–999 к/с игры CEF не занимает ЦП и видеокарту сотни раз в секунду.
+    // Отсчёт копится по интервалу (last += interval), поэтому в среднем ровно ui_fps, без дрожания.
+    if (const int64_t interval = ui_frame_interval_qpc_.load(std::memory_order_acquire); interval > 0)
+    {
+        LARGE_INTEGER now{};
+        QueryPerformanceCounter(&now);
+        const int64_t last = last_begin_frame_qpc_.load(std::memory_order_acquire);
+        if (last != 0 && now.QuadPart - last < interval)
+            return;
+        const int64_t next = (last == 0 || now.QuadPart - last > 2 * interval) ? now.QuadPart : last + interval;
+        last_begin_frame_qpc_.store(next, std::memory_order_release);
+    }
+
     if (!CefCurrentlyOn(TID_UI))
     {
         bool expected = false;

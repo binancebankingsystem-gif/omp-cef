@@ -207,6 +207,8 @@ public:
     }
 
     void FocusBrowser(int id, bool focus);
+    // Primorsk: не чаще fps раз в секунду слать BeginFrame браузерам (0 — каждый кадр игры).
+    void SetUiFrameRate(int fps);
     void SetDrawEnabled(bool enabled)
     {
         draw_enabled_ = enabled;
@@ -288,6 +290,9 @@ private:
 
     std::unordered_map<int, PendingPaint> pending_;
     std::atomic<bool> begin_frame_task_pending_{false};
+    // Primorsk: частота перерисовки интерфейса (ui_fps в cef/config.json); 0 — на каждом кадре игры.
+    std::atomic<int64_t> ui_frame_interval_qpc_{0};
+    std::atomic<int64_t> last_begin_frame_qpc_{0};
 
     struct DragState
     {
