@@ -560,9 +560,14 @@ void BrowserManager::Shutdown()
 
     screen_capture_.StopAll();
     screen_capture_.OnDeviceLost();
-    browsers_.clear();
-    worldRenderers_.clear();
-    entityToBrowserId_.clear();
+    {
+        // Primorsk: под блокировкой только очистка таблиц; CefShutdown ждёт поток UI — его вызываем без блокировки.
+        std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_);
+        browsers_.clear();
+        worldRenderers_.clear();
+        entityToBrowserId_.clear();
+        pending_.clear();
+    }
 
     CefShutdown();
     initialized_ = false;
@@ -573,6 +578,7 @@ void BrowserManager::Shutdown()
 void BrowserManager::CreateBrowser(
     int id, const std::string& url, bool focused, bool controls_chat, float width, float height)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     LOG_DEBUG("[CEF] CreateBrowser called with ID={}, url={}", id, url);
     
     if (browsers_.count(id))
@@ -587,6 +593,7 @@ void BrowserManager::CreateBrowser(
 void BrowserManager::CreateWorldBrowser(
     int id, const std::string& url, const std::string& textureName, float width, float height)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     LOG_DEBUG("[CEF] CreateWorldBrowser called with ID={}, url={}", id, url);
     
     const std::string normalized_url = NormalizeUrlForEmbeds(url);
@@ -606,6 +613,7 @@ void BrowserManager::CreateWorldBrowser(
 void BrowserManager::CreateWorld2DBrowser(
     int id, const std::string& url, float worldX, float worldY, float worldZ, float width, float height, float offsetZ, float pivotX, float pivotY)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     LOG_DEBUG("[CEF] CreateWorld2DBrowser called with ID={}, url={}, worldX={}, worldY={}, worldZ={}, offsetZ={}, pivotX={}, pivotY={}", 
         id, url, worldX, worldY, worldZ, offsetZ, pivotX, pivotY);
     
@@ -626,6 +634,7 @@ void BrowserManager::CreateWorld2DBrowser(
 void BrowserManager::CreateBrowserInternal(
     int id, const std::string& url, bool focused, bool controls_chat, float width, float height)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (CefCurrentlyOn(TID_UI) == false)
     {
         CefPostTask(TID_UI,
@@ -711,6 +720,7 @@ void BrowserManager::CreateBrowserInternal(
 void BrowserManager::CreateWorldBrowserInternal(
     int id, const std::string& url, std::string textureName, float width, float height)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (CefCurrentlyOn(TID_UI) == false)
     {
         CefPostTask(TID_UI,
@@ -767,6 +777,7 @@ void BrowserManager::CreateWorldBrowserInternal(
 void BrowserManager::CreateWorld2DBrowserInternal(
     int id, const std::string& url, float worldX, float worldY, float worldZ, float width, float height, float offsetZ, float pivotX, float pivotY)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (CefCurrentlyOn(TID_UI) == false)
     {
         CefPostTask(TID_UI,
@@ -920,6 +931,7 @@ void BrowserManager::SetBrowserVisible(int id, bool visible)
 
 void BrowserManager::DestroyBrowser(int id)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (!CefCurrentlyOn(TID_UI))
     {
         CefPostTask(TID_UI, base::BindOnce(&BrowserManager::DestroyBrowser, base::Unretained(this), id));
@@ -979,6 +991,7 @@ void BrowserManager::DestroyBrowser(int id)
 
 void BrowserManager::DestroyAllBrowsers()
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (!CefCurrentlyOn(TID_UI))
     {
         CefPostTask(TID_UI, base::BindOnce(&BrowserManager::DestroyAllBrowsers, base::Unretained(this)));
@@ -1092,6 +1105,7 @@ void BrowserManager::SetDevToolsEnabled(int browserId, bool enabled)
 
 void BrowserManager::AttachBrowserToObject(int browserId, int objectId)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (!browsers_.count(browserId))
     {
         LOG_WARN("[CEF] AttachBrowserToObject: Browser ID {} does not exist.", browserId);
@@ -1113,6 +1127,7 @@ void BrowserManager::AttachBrowserToObject(int browserId, int objectId)
 
 void BrowserManager::DetachBrowserFromObject(int browserId, int objectId)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     CEntity* nativeEntity = GetEntityFromObjectId(objectId);
     if (nativeEntity)
     {
@@ -1145,6 +1160,7 @@ CEntity* BrowserManager::GetEntityFromObjectId(int objectId)
 
 void BrowserManager::OnBrowserCreated(int id, CefRefPtr<CefBrowser> browser)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     auto it = browsers_.find(id);
     if (it != browsers_.end())
     {
@@ -1166,6 +1182,7 @@ void BrowserManager::OnBrowserCreated(int id, CefRefPtr<CefBrowser> browser)
 
 void BrowserManager::OnBrowserClosed(int id)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     player_stats_poll_.erase(id);
     screen_capture_.Stop(id);
     pending_.erase(id);
@@ -1267,6 +1284,7 @@ void BrowserManager::DispatchScreenFrameOnUi(std::shared_ptr<CapturedScreenFrame
 
 void BrowserManager::ClearPendingPaint(int id)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     auto it = pending_.find(id);
     if (it == pending_.end())
         return;
@@ -1283,6 +1301,7 @@ void BrowserManager::ClearPendingPaint(int id)
 
 void BrowserManager::RestoreBrowserTextures()
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     for (auto& [id, instance] : browsers_)
     {
         if (!instance || !instance->visible)
@@ -1322,6 +1341,7 @@ void BrowserManager::RestoreBrowserTextures()
 
 void BrowserManager::RequestVisibleBrowsersRepaint()
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (!CefCurrentlyOn(TID_UI))
     {
         CefPostTask(TID_UI, base::BindOnce(&BrowserManager::RequestVisibleBrowsersRepaint, base::Unretained(this)));
@@ -1352,6 +1372,7 @@ void BrowserManager::RequestTextureClear(int id)
 
 void BrowserManager::OnPaint(int id, const void* buffer, int width, int height, const cef_rect_t* dirtyRects, size_t dirtyRectCount)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (isCefUpdatesPaused_ || !buffer || width <= 0 || height <= 0)
         return;
 
@@ -1440,6 +1461,7 @@ void BrowserManager::SendExternalBeginFrames()
 
 void BrowserManager::DispatchExternalBeginFramesOnUi()
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     CEF_REQUIRE_UI_THREAD();
 
     for (auto& [id, inst] : browsers_)
@@ -1456,6 +1478,7 @@ void BrowserManager::DispatchExternalBeginFramesOnUi()
 
 bool BrowserManager::RenderAll()
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     UpdateNativeUiInput();
 
     if (ShouldSkipBrowserRendering())
@@ -1525,7 +1548,7 @@ bool BrowserManager::RenderAll()
         }
         else
         {
-            inst->view.UpdateTexture(pending_paint.pixels.data(), dirty_rects, dirty_rect_count);
+            inst->view.UpdateTexture(pending_paint.pixels.data(), pending_paint.width, pending_paint.height, dirty_rects, dirty_rect_count);
         }
 
         pending_paint.ready = false;
@@ -1601,6 +1624,7 @@ bool BrowserManager::RenderAll()
 
 void BrowserManager::OnBeforeEntityRender(CEntity* entity)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (ShouldSkipBrowserRendering())
         return;
 
@@ -1623,6 +1647,7 @@ void BrowserManager::OnBeforeEntityRender(CEntity* entity)
 
 void BrowserManager::OnAfterEntityRender(CEntity* entity)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     auto it = entityToBrowserId_.find(entity);
     if (it == entityToBrowserId_.end())
         return;
@@ -1636,12 +1661,14 @@ void BrowserManager::OnAfterEntityRender(CEntity* entity)
 
 BrowserInstance* BrowserManager::GetBrowserInstance(int id)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     auto it = browsers_.find(id);
     return it != browsers_.end() ? it->second.get() : nullptr;
 }
 
 bool BrowserManager::IsAnyBrowserVisible() const
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (ShouldSkipBrowserRendering())
         return false;
 
@@ -1655,6 +1682,7 @@ bool BrowserManager::IsAnyBrowserVisible() const
 
 bool BrowserManager::IsAnyBrowserFocused() const
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     for (const auto& [id, instance] : browsers_)
     {
         if (instance && instance->view.IsFocused())
@@ -1729,6 +1757,7 @@ BrowserInstance* BrowserManager::GetFocusedBrowser()
 
 void BrowserManager::UpdateAudioSpatialization()
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     // Update listener from player camera
     if (CPlayerPed* player = FindPlayerPed(-1))
     {
@@ -1831,6 +1860,7 @@ bool BrowserManager::ShouldSkipBrowserRendering() const
 
 bool BrowserManager::IsFocusedTextInputActive() const
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (!focus_ || focusedBrowserId_ < 0)
         return false;
 
@@ -1861,6 +1891,7 @@ void BrowserManager::DispatchNativeUiEvents()
 
 void BrowserManager::EmitCustomEscapeMenuVisibility()
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (!CefCurrentlyOn(TID_UI))
     {
         CefPostTask(TID_UI, base::BindOnce(&BrowserManager::EmitCustomEscapeMenuVisibility, base::Unretained(this)));
@@ -1889,6 +1920,7 @@ void BrowserManager::EmitCustomEscapeMenuVisibility()
 
 void BrowserManager::EmitCustomPlayerListVisibility()
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     if (!CefCurrentlyOn(TID_UI))
     {
         CefPostTask(TID_UI, base::BindOnce(&BrowserManager::EmitCustomPlayerListVisibility, base::Unretained(this)));
@@ -1951,6 +1983,7 @@ bool BrowserManager::HandleNativePlayerListOpenRequest()
 
 void BrowserManager::OnDeviceLost()
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     // Stop CEF rendering during device reset
     // This prevents CEF from trying to update textures while they're invalid
     isCefUpdatesPaused_ = true;
@@ -1979,6 +2012,7 @@ void BrowserManager::OnDeviceLost()
 
 void BrowserManager::OnDeviceReset(IDirect3DDevice9* device)
 {
+    std::lock_guard<std::recursive_mutex> containers_lock(containers_mutex_); // Primorsk: см. manager.hpp
     // Recreate all browser View resources (2D overlays)
     for (auto& [id, instance] : browsers_) 
     {

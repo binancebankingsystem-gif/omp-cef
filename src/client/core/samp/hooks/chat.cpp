@@ -100,6 +100,8 @@ void ChatHook::SetChatInputState(bool open)
     focus_.SetChatInputOpen(open);
 
     // Local JS event to all browsers
+    // Primorsk: таблицу браузеров меняет поток CEF UI — обходим только под блокировкой менеджера.
+    std::lock_guard<std::recursive_mutex> containers_lock(browser_.ContainersMutex());
     for (const auto& kv : browser_.GetAllBrowsers())
     {
         const int id = kv.first;

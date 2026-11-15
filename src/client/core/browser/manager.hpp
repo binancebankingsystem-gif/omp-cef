@@ -4,6 +4,7 @@
 #include <bitset>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -192,10 +193,12 @@ public:
 
     BrowserInstance* GetBrowserInstance(int id);
     BrowserInstance* GetFocusedBrowser();
+    // ВНИМАНИЕ (Primorsk): обходить результат только под ContainersMutex() — таблицу меняет поток CEF UI.
     const std::unordered_map<int, std::unique_ptr<BrowserInstance>>& GetAllBrowsers() const
     {
         return browsers_;
     }
+    std::recursive_mutex& ContainersMutex() const { return containers_mutex_; }
     bool IsAnyBrowserVisible() const;
     bool IsAnyBrowserFocused() const;
     cef_cursor_type_t GetCursorType() const
@@ -261,6 +264,12 @@ private:
 
     // The single source for which browser has focus. -1 means none.
     int focusedBrowserId_ = -1;
+
+    // Primorsk: одна блокировка на browsers_, worldRenderers_, entityToBrowserId_ и pending_.
+    // Их меняет поток CEF UI (создание/закрытие/OnPaint), а читает поток игры на каждом кадре (RenderAll):
+    // без блокировки это неопределённое поведение и повреждение кучи при создании браузера (issue #51).
+    // Рекурсивная — функции менеджера вызывают друг друга вложенно.
+    mutable std::recursive_mutex containers_mutex_;
 
     std::unordered_map<int, std::unique_ptr<BrowserInstance>> browsers_;
     std::unordered_map<int, std::unique_ptr<WorldRenderer>> worldRenderers_;

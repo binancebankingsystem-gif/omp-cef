@@ -1,0 +1,20 @@
+name: Primorsk client build
+
+# Сборка исправленного клиента omp-cef (client.dll, cef.asi, renderer.exe) для Primorsk Online.
+# Исправления: обрезка записи кадра по размерам текстуры и буфера + блокировка таблиц браузеров (issue #51).
+on:
+  workflow_dispatch:
+  push:
+    branches: [primorsk-fix]
+
+permissions:
+  contents: read
+
+jobs:
+  build-client:
+    uses: ./.github/workflows/build-client-reusable.yml
+    with:
+      version: 1.4.0-primorsk1
+      cef-version: 148.0.10+g7ee53f5+chromium-148.0.7778.218
+      cef-arch: windows32
+      build-type: Release

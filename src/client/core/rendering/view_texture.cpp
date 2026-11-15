@@ -1,6 +1,7 @@
 #include "view_texture.hpp"
 #include "system/logger.hpp"
 #include <game_sa/RenderWare.h>
+#include <algorithm>
 #include <cstring>
 
 ViewTexture::ViewTexture(LPDIRECT3DDEVICE9 device, int width, int height)
@@ -151,8 +152,21 @@ void ViewTexture::Update(const void* pixels, int width, int height, bool updateR
 
 void ViewTexture::UpdatePartial(const void* pixels, int bufferWidth, int bufferHeight, int x, int y, int width, int height, bool updateRwRaster)
 {
-    if (!texture_ || !rwRaster_ || !pixels || width <= 0 || height <= 0) 
+    if (!texture_ || !rwRaster_ || !pixels || width <= 0 || height <= 0 || bufferWidth <= 0 || bufferHeight <= 0)
         return;
+
+    // Primorsk: обрезаем прямоугольник и по буферу кадра, и по текстуре — запись никогда не выходит за границы.
+    const int left   = std::max(0, x);
+    const int top    = std::max(0, y);
+    const int right  = std::min({ x + width,  bufferWidth,  width_ });
+    const int bottom = std::min({ y + height, bufferHeight, height_ });
+    if (right <= left || bottom <= top)
+        return;
+
+    x = left;
+    y = top;
+    width = right - left;
+    height = bottom - top;
 
     RECT lockRect = { (LONG)x, (LONG)y, (LONG)(x + width), (LONG)(y + height) };
     D3DLOCKED_RECT rect;
@@ -161,10 +175,10 @@ void ViewTexture::UpdatePartial(const void* pixels, int bufferWidth, int bufferH
         const auto* src = static_cast<const uint8_t*>(pixels);
         auto* dst = static_cast<uint8_t*>(rect.pBits);
 
-        for (int row = 0; row < height; ++row) 
+        for (int row = 0; row < height; ++row)
         {
-            const uint8_t* srcRow = src + ((y + row) * bufferWidth + x) * 4;
-            uint8_t* dstRow = dst + (row * rect.Pitch);
+            const uint8_t* srcRow = src + (static_cast<size_t>(y + row) * bufferWidth + x) * 4;
+            uint8_t* dstRow = dst + (static_cast<size_t>(row) * rect.Pitch);
             memcpy(dstRow, srcRow, static_cast<size_t>(width) * 4);
         }
 
@@ -180,10 +194,10 @@ void ViewTexture::UpdatePartial(const void* pixels, int bufferWidth, int bufferH
         const int rwPitch = rwRaster_->stride;
         const auto* src = static_cast<const uint8_t*>(pixels);
 
-        for (int row = 0; row < height; ++row) 
+        for (int row = 0; row < height; ++row)
         {
-            const uint8_t* srcRow = src + ((y + row) * bufferWidth + x) * 4;
-            uint8_t* dstRow = rasterPixels + ((y + row) * rwPitch + x * 4);
+            const uint8_t* srcRow = src + (static_cast<size_t>(y + row) * bufferWidth + x) * 4;
+            uint8_t* dstRow = rasterPixels + (static_cast<size_t>(y + row) * rwPitch + static_cast<size_t>(x) * 4);
             memcpy(dstRow, srcRow, static_cast<size_t>(width) * 4);
         }
 

@@ -42,25 +42,30 @@ void View::Resize(int width, int height)
     InternalCreateTexture(std::max(1, width), std::max(1, height));
 }
 
-void View::UpdateTexture(const uint8_t* data, const cef_rect_t* dirtyRects, size_t count)
+void View::UpdateTexture(const uint8_t* data, int bufferWidth, int bufferHeight, const cef_rect_t* dirtyRects, size_t count)
 {
-    if (!wrapper_ || !data) 
+    if (!wrapper_ || !data || bufferWidth <= 0 || bufferHeight <= 0)
         return;
 
-    if (count == 0 || !dirtyRects) 
+    // Primorsk: раньше сюда передавался размер ТЕКСТУРЫ (width_/height_) как размер буфера.
+    // Если CEF отдал кадр другого размера (смена разрешения, раннее создание браузера),
+    // шаг строки был неверным, а прямоугольник мог выйти за текстуру -> повреждение кучи (issue #51).
+    if (bufferWidth != width_ || bufferHeight != height_)
+        LOG_WARN("[View] Frame size {}x{} differs from texture {}x{} (view {}), clamping", bufferWidth, bufferHeight, width_, height_, id_);
+
+    if (count == 0 || !dirtyRects)
     {
-        LOG_DEBUG("[View] No dirty rects provided, performing full update");
-        wrapper_->Update(data, width_, height_, false);
+        wrapper_->UpdatePartial(data, bufferWidth, bufferHeight, 0, 0, bufferWidth, bufferHeight, false);
         return;
     }
 
     for (size_t i = 0; i < count; ++i)
     {
         const auto& r = dirtyRects[i];
-        if (r.width <= 0 || r.height <= 0) 
+        if (r.width <= 0 || r.height <= 0)
             continue;
 
-        wrapper_->UpdatePartial(data, width_, height_, r.x, r.y, r.width, r.height, false);
+        wrapper_->UpdatePartial(data, bufferWidth, bufferHeight, r.x, r.y, r.width, r.height, false);
     }
 }
 
