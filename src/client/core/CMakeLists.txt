@@ -91,7 +91,14 @@ target_link_libraries(${PROJECT_NAME}
         OpenAL::OpenAL
         unofficial-sodium::sodium
         kcp
+        dbghelp
 )
+
+# Primorsk: файл символов client.pdb для диагностики падений (crash_diag.cpp пишет имена функций и строки).
+if (MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /Zi)
+    target_link_options(${PROJECT_NAME} PRIVATE /DEBUG /OPT:REF /OPT:ICF)
+endif()
 
 target_compile_definitions(${PROJECT_NAME}
     PRIVATE

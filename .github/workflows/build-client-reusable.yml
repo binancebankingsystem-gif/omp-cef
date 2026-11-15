@@ -112,3 +112,11 @@ jobs:
             package/cef/client.dll
             package/cef/renderer.exe
             package/cef.asi
+
+      # Primorsk: файл символов для диагностики падений (кладётся рядом с client.dll только у разработчиков)
+      - name: Upload Client Symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-symbols-v${{ inputs.version }}
+          path: build/src/client/core/${{ inputs.build-type }}/client.pdb
+          if-no-files-found: warn
