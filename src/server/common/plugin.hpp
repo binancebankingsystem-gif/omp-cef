@@ -24,6 +24,9 @@ struct CefPluginOptions
 	std::vector<uint8_t> master_resource_key = {};
 	ResourceLoaderUiMode resources_loader_mode = ResourceLoaderUiMode::Cef;
 	int resources_loader_dialog_id = ResourceDownloadDialogManager::DefaultDialogId;
+	// Primorsk: адрес приёма сетевого сервера CEF (network.bind open.mp / bind в server.cfg).
+	// Пусто или 0.0.0.0 — все интерфейсы. При 127.0.0.1 брандмауэр Windows не спрашивает разрешения.
+	std::string bind_address = {};
 };
 
 struct RegisteredEvent

@@ -41,9 +41,22 @@ void CefPlugin::Initialize(std::unique_ptr<IPlatformBridge> bridge, uint16_t lis
 
     const uint16_t port = (listen_port != 0 ? listen_port : DefaultListenPort);
 
+	// Primorsk: адрес приёма из конфигурации сервера; неверный — все интерфейсы с предупреждением.
+	asio::ip::address_v4 bind_address = asio::ip::address_v4::any();
+	if (!options.bind_address.empty() && options.bind_address != "0.0.0.0")
+	{
+		std::error_code bind_error;
+		const auto parsed = asio::ip::make_address_v4(options.bind_address, bind_error);
+		if (bind_error)
+			LOG_WARN("Invalid bind address '%s' (%s), listening on all interfaces.", options.bind_address.c_str(), bind_error.message().c_str());
+		else
+			bind_address = parsed;
+	}
+
 	try
 	{
 		network_server_ = std::make_unique<NetworkServer>(
+			bind_address,
 			port,
 			io_context_,
 			[this](const asio::ip::udp::endpoint& from, const char* data, int len)
@@ -75,7 +88,7 @@ void CefPlugin::Initialize(std::unique_ptr<IPlatformBridge> bridge, uint16_t lis
 
 		running_ = true;
 
-		LOG_INFO("Network Server started successfully on port %d.", (int)port);
+		LOG_INFO("Network Server started on %s:%d.", bind_address.to_string().c_str(), (int)port);
 	}
 	catch (const std::exception& e)
 	{

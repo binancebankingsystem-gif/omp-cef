@@ -78,6 +78,7 @@ void CefOmpComponent::onInit(IComponentList* components)
     options.master_resource_key = master_resource_key_;
     options.resources_loader_mode = resource_loader_ui_mode_;
     options.resources_loader_dialog_id = resource_download_dialog_id_;
+    options.bind_address = bind_address_;
 
     auto bridge = CreateOmpPlatformBridge(core_, pawn_);
     plugin_->Initialize(std::move(bridge), cef_network_port_, options);
@@ -106,6 +107,10 @@ void CefOmpComponent::provideConfiguration(ILogger& logger, IEarlyConfig& config
     
     server_port_ = static_cast<uint16_t>(port_value);
     cef_network_port_ = static_cast<uint16_t>(port_value + 2);
+
+    // Primorsk: сетевой сервер CEF слушает тот же адрес, что и open.mp (network.bind).
+    const StringView bind_sv = config.getString("network.bind");
+    bind_address_.assign(bind_sv.data(), bind_sv.length());
 
 	if (defaults) {
 		config.setBool("cef.debug", false);

@@ -3,14 +3,15 @@
 
 #include <shared/utils.hpp>
 
-NetworkServer::NetworkServer(unsigned short port,
+NetworkServer::NetworkServer(const asio::ip::address_v4& bind_address,
+                             unsigned short port,
                              asio::io_context& context,
                              PacketHandler handler,
                              KcpTickHandler kcp_tick_handler)
     : handler_(std::move(handler)),
       kcp_tick_handler_(std::move(kcp_tick_handler)),
       io_context_(context),
-      socket_(io_context_, asio::ip::udp::endpoint(asio::ip::udp::v4(), port)),
+      socket_(io_context_, asio::ip::udp::endpoint(bind_address, port)),
       kcp_update_timer_(context)
 {
 }

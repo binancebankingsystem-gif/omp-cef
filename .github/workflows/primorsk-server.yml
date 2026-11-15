@@ -1,0 +1,111 @@
+name: Primorsk server build
+
+# Сборка серверного компонента omp-cef для open.mp (components\Cef.dll, Windows x86 — как у нашего сервера).
+# Исправление: сетевой сервер CEF слушает адрес network.bind open.mp, а не всегда 0.0.0.0.
+# Шаги — по образцу build-server-reusable.yml (только Windows, ServerOmp, x86, Release).
+on:
+  workflow_dispatch:
+  push:
+    branches: [primorsk-fix]
+    paths:
+      - 'src/server/**'
+      - 'src/shared/**'
+      - 'deps/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'vcpkg.json'
+      - '.github/workflows/primorsk-server.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build ServerOmp (x86) on Windows
+    runs-on: windows-latest
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      TRIPLET: x86-windows-static
+
+    steps:
+      - name: Checkout code and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Cache vcpkg + installed
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.VCPKG_ROOT }}
+            ${{ github.workspace }}/vcpkg_installed
+            ~/.cache/vcpkg/archives
+            C:\Users\runneradmin\AppData\Local\vcpkg\archives
+          key: vcpkg-server-windows-x86-windows-static-Release-${{ hashFiles('vcpkg.json') }}
+
+      - name: Setup vcpkg
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -d "${VCPKG_ROOT}/.git" ]]; then
+            git clone https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}"
+          else
+            if git -C "${VCPKG_ROOT}" rev-parse --is-shallow-repository | grep -q true; then
+              git -C "${VCPKG_ROOT}" fetch --unshallow --prune --tags
+            else
+              git -C "${VCPKG_ROOT}" fetch --prune --tags
+            fi
+          fi
+          "${VCPKG_ROOT}/bootstrap-vcpkg.bat"
+
+      - name: vcpkg install (manifest)
+        shell: bash
+        run: |
+          set -euo pipefail
+          "${VCPKG_ROOT}/vcpkg.exe" install --triplet "${TRIPLET}" --feature-flags=manifests,binarycaching --x-feature=server
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET="${TRIPLET}" \
+            -DVCPKG_FEATURE_FLAGS=manifests\;binarycaching \
+            -DVCPKG_MANIFEST_FEATURES=server \
+            -DDEV_ALL_TARGETS=OFF \
+            -DBUILD_CLIENT=OFF \
+            -DBUILD_SERVER_OMP=ON \
+            -DBUILD_SERVER_SAMP=OFF \
+            -A Win32
+
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --target ServerOmp --parallel
+
+      - name: Stage and hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf artifact-server && mkdir -p artifact-server
+          mapfile -t candidates < <(find build -type f -name "Cef.dll" -not -path "*/vcpkg_installed/*" -not -path "*/CMakeFiles/*" -print)
+          printf ' - %s\n' "${candidates[@]}"
+          if [[ "${#candidates[@]}" -ne 1 ]]; then
+            echo "::error::Expected exactly one Cef.dll, found ${#candidates[@]}"
+            exit 1
+          fi
+          cp "${candidates[0]}" artifact-server/Cef.dll
+          line="Cef.dll sha256=$(sha256sum artifact-server/Cef.dll | cut -d' ' -f1) size=$(stat -c %s artifact-server/Cef.dll) commit=${GITHUB_SHA}"
+          echo "$line"
+          echo "$line" > artifact-server/SHA256.txt
+          echo "### $line" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload server binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-ServerOmp-x86-Windows-primorsk
+          path: artifact-server/*

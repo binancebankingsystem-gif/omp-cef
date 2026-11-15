@@ -8,6 +8,17 @@ on:
   workflow_dispatch:
   push:
     branches: [primorsk-fix]
+    # Клиент собирается только при правке клиента/общего кода (правки сервера собирает primorsk-server.yml).
+    paths:
+      - 'src/client/**'
+      - 'src/shared/**'
+      - 'deps/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'vcpkg.json'
+      - '.github/actions/**'
+      - '.github/workflows/primorsk-client.yml'
+      - '.github/workflows/build-client-reusable.yml'
 
 permissions:
   contents: read

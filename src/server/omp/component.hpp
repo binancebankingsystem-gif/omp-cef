@@ -53,4 +53,5 @@ private:
 
     uint16_t server_port_ = 7777;
     uint16_t cef_network_port_ = 7779;
+    std::string bind_address_; // Primorsk: network.bind open.mp
 };

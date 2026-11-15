@@ -13,7 +13,9 @@ class NetworkServer
 public:
     using KcpTickHandler = std::function<void(uint32_t)>;
 
-    NetworkServer(unsigned short port,
+    // Primorsk: bind_address — адрес IPv4 для приёма (пусто — все интерфейсы, как раньше).
+    NetworkServer(const asio::ip::address_v4& bind_address,
+                  unsigned short port,
                   asio::io_context& context,
                   PacketHandler handler,
                   KcpTickHandler kcp_tick_handler);

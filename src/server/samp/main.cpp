@@ -112,6 +112,7 @@ PLUGIN_EXPORT bool PLUGIN_CALL Load(void** ppData)
     options.master_resource_key = master_key;
     options.resources_loader_mode = resource_loader_mode;
     options.resources_loader_dialog_id = resource_download_dialog_id;
+    options.bind_address = config.GetString("bind", ""); // Primorsk: bind из server.cfg
 
     auto bridge = CreateSampPlatformBridge();
     plugin_->Initialize(std::move(bridge), cef_network_port, options);
