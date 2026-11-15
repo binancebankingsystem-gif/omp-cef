@@ -1,32 +1,7 @@
 #include "game.hpp"
 
-#include <samp/addresses.hpp>
-
+// Primorsk: addresses only; readiness checks live in SampGameView (game_view.cpp).
 GameView_R5::GameView_R5()
+    : SampGameView("R5", 0x26EBAC, 0xA06F0, 0xA05D0, 0x26EB40)
 {
-    auto* base = SampAddresses::Instance().Base();
-
-    c_game_ptr_ = *reinterpret_cast<void**>(base + 0x26EBAC);
-    set_cursor_fn_ = base + 0xA06F0;
-    process_input_enable_fn_ = base + 0xA05D0;
-}
-
-void GameView_R5::SetCursorMode(int mode, bool hideCursorImmediately)
-{
-    if (!set_cursor_fn_ || !c_game_ptr_)
-        return;
-
-    using Fn = void(__thiscall*)(void*, int, int);
-    auto func = reinterpret_cast<Fn>(set_cursor_fn_);
-    func(c_game_ptr_, mode, hideCursorImmediately);
-}
-
-void GameView_R5::ProcessInputEnabling()
-{
-    if (!process_input_enable_fn_ || !c_game_ptr_)
-        return;
-
-    using Fn = void(__thiscall*)(void*);
-    auto func = reinterpret_cast<Fn>(process_input_enable_fn_);
-    func(c_game_ptr_);
 }

@@ -27,7 +27,7 @@ jobs:
   build-client:
     uses: ./.github/workflows/build-client-reusable.yml
     with:
-      version: 1.4.0-primorsk5
+      version: 1.4.0-primorsk6
       cef-version: 148.0.10+g7ee53f5+chromium-148.0.7778.218
       cef-arch: windows32
       build-type: Release
