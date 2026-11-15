@@ -75,6 +75,101 @@ namespace
             static_cast<unsigned long long>(address - moduleBase), symbolText);
     }
 
+    // Память читаем только из выделенных страниц с правом чтения (VirtualQuery), а само копирование —
+    // под __try: страница может пропасть между проверкой и чтением. IsBadReadPtr не используем.
+    bool IsReadableProtect(DWORD protect)
+    {
+        if (protect & (PAGE_GUARD | PAGE_NOACCESS))
+            return false;
+        const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
+            PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+        return (protect & readable) != 0;
+    }
+
+    // Отдельная функция без объектов C++: в ней можно __try (C2712).
+    bool GuardedCopy(void* dst, const void* src, size_t size)
+    {
+        __try
+        {
+            memcpy(dst, src, size);
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            return false;
+        }
+    }
+
+    // Сколько байт удалось прочитать по адресу (0 — не читается). Читаем не дальше конца области памяти.
+    size_t ReadMemory(uintptr_t address, void* out, size_t size)
+    {
+        if (address < 0x10000)
+            return 0;
+        MEMORY_BASIC_INFORMATION mbi{};
+        if (VirtualQuery(reinterpret_cast<LPCVOID>(address), &mbi, sizeof(mbi)) != sizeof(mbi))
+            return 0;
+        if (mbi.State != MEM_COMMIT || !IsReadableProtect(mbi.Protect))
+            return 0;
+        const uintptr_t regionEnd = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+        const size_t available = static_cast<size_t>(regionEnd - address);
+        const size_t count = size < available ? size : available;
+        return GuardedCopy(out, reinterpret_cast<const void*>(address), count) ? count : 0;
+    }
+
+#if defined(_M_IX86)
+    // По 64 байта памяти, на которую указывает каждый регистр общего назначения.
+    void DumpRegisterMemory(HANDLE file, const CONTEXT& ctx)
+    {
+        const struct { const char* name; DWORD value; } regs[] = {
+            { "EAX", ctx.Eax }, { "EBX", ctx.Ebx }, { "ECX", ctx.Ecx }, { "EDX", ctx.Edx },
+            { "ESI", ctx.Esi }, { "EDI", ctx.Edi }, { "EBP", ctx.Ebp }, { "ESP", ctx.Esp },
+        };
+        constexpr size_t kBytes = 64;
+        char line[400];
+        for (const auto& reg : regs)
+        {
+            unsigned char data[kBytes] = {};
+            const size_t got = ReadMemory(reg.value, data, kBytes);
+            if (got == 0)
+            {
+                _snprintf_s(line, _TRUNCATE, "     [%s=%08lx] память не читается", reg.name, reg.value);
+                AppendLine(file, line);
+                continue;
+            }
+            for (size_t row = 0; row < got; row += 32)
+            {
+                int pos = _snprintf_s(line, _TRUNCATE, "     [%s=%08lx]+%02u:", reg.name, reg.value, static_cast<unsigned>(row));
+                for (size_t i = row; i < got && i < row + 32 && pos > 0 && pos < static_cast<int>(sizeof(line)) - 4; ++i)
+                    pos += _snprintf_s(line + pos, sizeof(line) - pos, _TRUNCATE, " %02x", data[i]);
+                AppendLine(file, line);
+            }
+        }
+    }
+
+    // CEntity::GetBoundRect (0x534100–0x534200) и соседняя 0x533000–0x533100 в gta_sa.exe 1.0 US
+    // (без ASLR, база 0x400000): номер модели сущности — int16 m_nModelIndex по смещению 0x22.
+    void DumpEntityModel(HANDLE file, const CONTEXT& ctx)
+    {
+        const DWORD eip = ctx.Eip;
+        const bool inBoundRect = eip >= 0x534100 && eip < 0x534200;
+        const bool inNear = eip >= 0x533000 && eip < 0x533100;
+        if (!inBoundRect && !inNear)
+            return;
+        const struct { const char* name; DWORD base; } regs[] = { { "ESI", ctx.Esi }, { "ECX", ctx.Ecx } };
+        char line[200];
+        for (const auto& reg : regs)
+        {
+            short model = 0;
+            if (ReadMemory(static_cast<uintptr_t>(reg.base) + 0x22, &model, sizeof(model)) == sizeof(model))
+                _snprintf_s(line, _TRUNCATE, "     модель сущности = %d ([%s+0x22], %s=%08lx, %s)", model, reg.name, reg.name, reg.base,
+                    inBoundRect ? "CEntity::GetBoundRect" : "0x533000-0x533100");
+            else
+                _snprintf_s(line, _TRUNCATE, "     модель сущности: [%s+0x22] не читается (%s=%08lx)", reg.name, reg.name, reg.base);
+            AppendLine(file, line);
+        }
+    }
+#endif
+
     bool IsInteresting(DWORD code)
     {
         switch (code)
@@ -129,6 +224,8 @@ namespace
             _snprintf_s(line, _TRUNCATE, "     EIP=%08lx ESP=%08lx EBP=%08lx EAX=%08lx EBX=%08lx ECX=%08lx EDX=%08lx ESI=%08lx EDI=%08lx",
                 ctx.Eip, ctx.Esp, ctx.Ebp, ctx.Eax, ctx.Ebx, ctx.Ecx, ctx.Edx, ctx.Esi, ctx.Edi);
             AppendLine(file, line);
+            DumpEntityModel(file, ctx);
+            DumpRegisterMemory(file, ctx); // до StackWalk64: он меняет копию контекста
 
             STACKFRAME64 frame{};
             frame.AddrPC.Offset = ctx.Eip;
